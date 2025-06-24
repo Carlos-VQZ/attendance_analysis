@@ -17,13 +17,13 @@ def main():
         initial_sidebar_state="expanded"
     )
 
+    # API KEY DE GROQ - Cambiar por tu API key real
     load_dotenv()  # Carga las variables del archivo .env
 
     # API KEY DE GROQ
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
- 
 
-    # CSS personalizado
+    # CSS personalizado mejorado
     st.markdown("""
     <style>
     .main-header {
@@ -238,6 +238,7 @@ def main():
             st.error(f"Error al cargar archivo: {str(e)}")
             return None
 
+
     # Función para convertir HH:MM a minutos
     def tiempo_a_minutos(tiempo_str):
         if pd.isna(tiempo_str) or tiempo_str in ['F', 'N/L', 'J']:
@@ -265,91 +266,37 @@ def main():
 
     def contar_retardos(fila):
         return sum(1 for col in fila.index if str(col).isdigit() and pd.notna(fila[col]) and fila[col] not in ['F', 'N/L', 'J'] and tiempo_a_minutos(fila[col]) >= 10)
-   
 
-    # Funcion para obtener info del dataframe 
-    def obtener_info_dataframe(df):
-        """Obtiene información detallada del DataFrame - VERSIÓN CORREGIDA"""
-        from io import StringIO
-        import sys
-        
-        # Capturar info() correctamente
-        old_stdout = sys.stdout
-        sys.stdout = buffer = StringIO()
-        
-        # CORRECCIÓN: Ahora sí ejecuta df.info()
-        df.info()
-        
-        sys.stdout = old_stdout
-        info_str = buffer.getvalue()
-        
-        # Obtener dtypes
-        dtypes_info = []
-        for col in df.columns:
-            dtype = str(df[col].dtype)
-            unique_count = df[col].nunique()
-            sample_values = df[col].dropna().head(3).tolist()
-            dtypes_info.append(f"  {col}: {dtype} (únicos: {unique_count}, ejemplos: {sample_values})")
-        
-        return info_str, "\n".join(dtypes_info)
-
-    # Función para generar consulta con IA 
-    def generar_consulta_con_ia(pregunta, df_reporte, api_key):
-        """Genera consulta con IA - VERSIÓN CORREGIDA"""
+    # Función para consultar a Groq
+    def consultar_groq(pregunta, datos_contexto, api_key):
         url = "https://api.groq.com/openai/v1/chat/completions"
         
-        # CORRECCIÓN: Ahora recibe el DataFrame completo
-        info_str, dtypes_detail = obtener_info_dataframe(df_reporte)
-        
-        # Obtener describe solo para columnas numéricas
-        describe_str = ""
-        try:
-            numeric_cols = df_reporte.select_dtypes(include=['int64', 'float64']).columns.tolist()
-            if numeric_cols:
-                describe_str = str(df_reporte[numeric_cols].describe())
-        except:
-            describe_str = "No hay columnas numéricas para describir"
-        
-        # CONTEXTO MEJORADO Y SIMPLIFICADO
+        # Preparar el contexto con los datos
         contexto = f"""
-    Eres un experto en pandas y análisis de datos de RH. Genera SOLO código Python ejecutable para responder preguntas sobre el DataFrame 'df_reporte'.
+        Eres un analista de recursos humanos especializado en reportes de asistencias. 
+        Tienes acceso a los siguientes datos de un reporte de asistencias:
 
-    INFORMACIÓN DEL DATAFRAME:
-    Filas: {len(df_reporte)}
-    Columnas: {list(df_reporte.columns)}
+        RESUMEN DE DATOS:
+        - Total de empleados: {len(datos_contexto)}
+        - Total días trabajados: {datos_contexto['Días Trabajados'].sum()}
+        - Total faltas: {datos_contexto['Faltas'].sum()}
+        - Total retardos: {datos_contexto['Retardos'].sum()}
+        - Total registros mal: {datos_contexto['Registro Mal'].sum()}
 
-    TIPOS DE DATOS:
-    {df_reporte.dtypes.to_string()}
+        DATOS DETALLADOS:
+        {datos_contexto.to_string()}
 
-    MUESTRA DE DATOS:
-    {df_reporte.head(2).to_string()}
-
-    ESTADÍSTICAS (solo columnas numéricas):
-    {describe_str}
-
-    REGLAS IMPORTANTES:
-    1. USA SOLO el DataFrame 'df_reporte'
-    2. SIEMPRE termina con print() del resultado
-    3. SIEMPRE verifica que las columnas existan antes de usarlas
-    4. Para rankings, usa .head(5) o .tail(5)
-    5. Para columnas de texto (como 'Horas Trabajadas'), usa sort_values()
-    6. Para columnas numéricas, puedes usar nlargest(), nsmallest(), mean(), sum()
-
-    EJEMPLO DE CÓDIGO CORRECTO:
-    ```python
-    # Verificar si la columna existe
-    if 'Retardos' in df_reporte.columns:
-        print("Top 5 empleados con más retardos:")
-        print(df_reporte.nlargest(5, 'Retardos')[['Nombre', 'Retardos']])
-    else:
-        print("La columna 'Retardos' no existe")
-    ```
-
-    GENERA SOLO CÓDIGO PYTHON, SIN EXPLICACIONES.
-    """
+        INSTRUCCIONES:
+        - Responde siempre en español
+        - Sé específico y usa los datos proporcionados
+        - Si mencionas empleados específicos, usa sus nombres reales de los datos
+        - Proporciona insights útiles para recursos humanos
+        - Si te preguntan por estadísticas, calcula y presenta los resultados claramente
+        - Puedes sugerir acciones correctivas basadas en los datos
+        """
         
         headers = {
-            "Content-Type": "application/json", 
+            "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
         
@@ -359,8 +306,8 @@ def main():
                 {"role": "user", "content": pregunta}
             ],
             "model": "llama-3.3-70b-versatile",
-            "temperature": 1,  
-            "max_completion_tokens": 512,
+            "temperature": 0.7,
+            "max_completion_tokens": 1024,
             "top_p": 1,
             "stream": False
         }
@@ -368,179 +315,12 @@ def main():
         try:
             response = requests.post(url, headers=headers, json=data, timeout=30)
             response.raise_for_status()
-            codigo = response.json()['choices'][0]['message']['content']
-            # Limpiar el código de markdown si existe
-            codigo = codigo.replace('```python', '').replace('```', '').strip()
-            return codigo
+            print(response.json()['choices'][0]['message']['content'])
+            return response.json()['choices'][0]['message']['content']
+        except requests.exceptions.RequestException as e:
+            return f"Error al conectar con Groq: {str(e)}"
         except Exception as e:
-            return f"Error al generar consulta: {str(e)}"
-
-
-    def ejecutar_consulta_mejorada(codigo, df_reporte):
-        """Ejecuta código pandas y captura tanto texto como DataFrames"""
-        try:
-            import numpy as np
-            from io import StringIO
-            import sys
-            
-            # Variables para capturar resultados
-            resultado_texto = ""
-            resultado_df = None
-            
-            # Contexto seguro
-            contexto_seguro = {
-                'df_reporte': df_reporte,
-                'pd': pd,
-                'np': np,
-            }
-            
-            # Función print personalizada para capturar texto
-            output_buffer = StringIO()
-            def custom_print(*args, **kwargs):
-                print(*args, file=output_buffer, **kwargs)
-            
-            contexto_seguro['print'] = custom_print
-            
-            # Ejecutar código
-            exec(codigo, {"__builtins__": {}}, contexto_seguro)
-            
-            # Obtener resultado de texto
-            resultado_texto = output_buffer.getvalue()
-            
-            # Intentar extraer DataFrame del resultado si es posible
-            try:
-                # Si el código contiene operaciones que devuelven DataFrames
-                lines = codigo.strip().split('\n')
-                last_line = lines[-1].strip()
-                
-                # Si la última línea es un print de un DataFrame slice
-                if 'print(' in last_line and '[' in last_line and ']' in last_line:
-                    # Ejecutar solo la parte del DataFrame sin el print
-                    df_part = last_line.replace('print(', '').rstrip(')')
-                    resultado_df = eval(df_part, {"__builtins__": {}}, contexto_seguro)
-                    
-                    if isinstance(resultado_df, pd.DataFrame) and not resultado_df.empty:
-                        # Limpiar el texto del resultado ya que lo mostraremos como tabla
-                        lines_text = resultado_texto.strip().split('\n')
-                        # Mantener solo las líneas que no sean la tabla
-                        clean_lines = []
-                        skip_table = False
-                        for line in lines_text:
-                            if 'Nombre' in line and any(col in line for col in ['Faltas', 'Retardos', 'Horas']):
-                                skip_table = True
-                                continue
-                            if skip_table and (line.strip() == '' or not any(c.isalnum() for c in line)):
-                                skip_table = False
-                                continue
-                            if not skip_table:
-                                clean_lines.append(line)
-                        
-                        resultado_texto = '\n'.join(clean_lines)
-            except:
-                pass
-                
-            return resultado_texto, resultado_df
-            
-        except Exception as e:
-            return f"Error al ejecutar consulta: {str(e)}", None
-
-    # Función principal de análisis 
-    def analizar_con_ia(pregunta, df_reporte, api_key):
-        """Función mejorada para análisis con IA con mejor presentación"""
-        
-        # Generar código
-        codigo = generar_consulta_con_ia(pregunta, df_reporte, api_key)
-        
-        if codigo.startswith("Error"):
-            return codigo
-        
-        # Ejecutar código y capturar tanto texto como DataFrames
-        resultado_texto, resultado_df = ejecutar_consulta_mejorada(codigo, df_reporte)
-        
-        # Formatear respuesta con mejor presentación
-        return resultado_texto, resultado_df, codigo
-
-    def procesar_respuesta_ia(pregunta, df_reporte, api_key):
-        """Procesa la respuesta de IA y la formatea para Streamlit"""
-        resultado_texto, resultado_df, codigo = analizar_con_ia(pregunta, df_reporte, api_key)
-        
-        # Crear respuesta formateada
-        respuesta_formateada = {
-            'tipo': 'ia_analysis',
-            'codigo': codigo,
-            'texto': resultado_texto,
-            'dataframe': resultado_df
-        }
-        
-        return respuesta_formateada
-
-    def mostrar_mensaje_chat(role, message):
-        """Muestra mensajes del chat con formato mejorado"""
-        if role == "user":
-            st.markdown(f"""
-            <div class="chat-message-user">
-                <strong>🧑‍💼 Tu pregunta:</strong><br>{message}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            if isinstance(message, dict) and message.get('tipo') == 'ia_analysis':
-                # Respuesta de IA estructurada
-                st.markdown(f"""
-                <div class="chat-message-ai">
-                    <strong>🤖 Análisis realizado:</strong>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Mostrar código en expander
-                with st.expander("💻 Ver consulta ejecutada", expanded=False):
-                    st.code(message['codigo'], language='python')
-                
-                # Mostrar texto si existe
-                if message['texto'] and message['texto'].strip():
-                    # Limpiar texto y dividir en líneas
-                    texto_limpio = message['texto'].strip()
-                    lineas = texto_limpio.split('\n')
-                    
-                    # Separar líneas que son texto descriptivo de las que parecen datos tabulares
-                    texto_descriptivo = []
-                    datos_tabulares = []
-                    
-                    for linea in lineas:
-                        linea = linea.strip()
-                        if linea and not any(word in linea for word in ['Nombre', 'Faltas', 'Retardos', 'Horas']):
-                            texto_descriptivo.append(linea)
-                        elif linea:
-                            datos_tabulares.append(linea)
-                    
-                    # Mostrar solo texto descriptivo si existe
-                    if texto_descriptivo:
-                        texto_final = '\n'.join(texto_descriptivo)
-                        st.markdown(f"""
-                        <div style="background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); 
-                                   padding: 1.5rem; border-radius: 15px; margin: 0.5rem 0;
-                                   border-left: 4px solid #667eea; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                            <strong style="color: #1565c0;">📝 Análisis:</strong><br>
-                            <div style="color: #2c3e50; font-size: 1rem; line-height: 1.6; margin-top: 0.5rem;">
-                                {texto_final.replace(chr(10), '<br>')}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                
-                # Mostrar DataFrame si existe
-                if message['dataframe'] is not None and not message['dataframe'].empty:
-                    st.markdown("**📊 Resultado:**")
-                    st.dataframe(
-                        message['dataframe'], 
-                        use_container_width=True,
-                        hide_index=True
-                    )
-            else:
-                # Respuesta de IA simple (texto)
-                st.markdown(f"""
-                <div class="chat-message-ai">
-                    <strong>🤖 Respuesta:</strong><br>{message}
-                </div>
-                """, unsafe_allow_html=True)
+            return f"Error inesperado: {str(e)}"
 
     # Estado de los archivos
     col1, col2, col3, col4 = st.columns(4)
@@ -760,7 +540,7 @@ def main():
                             pregunta = "Dame un resumen general del reporte de asistencias con los principales hallazgos y estadísticas importantes"
                             st.session_state.chat_history.append(("user", pregunta))
                             with st.spinner("🔍 Analizando datos..."):
-                                respuesta = procesar_respuesta_ia(pregunta, df_reporte, GROQ_API_KEY)
+                                respuesta = consultar_groq(pregunta, df_reporte, GROQ_API_KEY)
                                 st.session_state.chat_history.append(("assistant", respuesta))
                             st.rerun()
                     
@@ -769,7 +549,7 @@ def main():
                             pregunta = "Identifica empleados con problemas críticos de asistencia, puntualidad o registro. Dame nombres específicos y qué acciones recomiendas"
                             st.session_state.chat_history.append(("user", pregunta))
                             with st.spinner("🔍 Identificando problemas..."):
-                                respuesta = procesar_respuesta_ia(pregunta, df_reporte, GROQ_API_KEY)
+                                respuesta = consultar_groq(pregunta, df_reporte, GROQ_API_KEY)
                                 st.session_state.chat_history.append(("assistant", respuesta))
                             st.rerun()
                     
@@ -778,7 +558,7 @@ def main():
                             pregunta = "¿Cuáles son los empleados con mejor desempeño en asistencia y puntualidad? Dame un ranking de los top 5"
                             st.session_state.chat_history.append(("user", pregunta))
                             with st.spinner("🔍 Evaluando desempeño..."):
-                                respuesta = procesar_respuesta_ia(pregunta, df_reporte, GROQ_API_KEY)
+                                respuesta = consultar_groq(pregunta, df_reporte, GROQ_API_KEY)
                                 st.session_state.chat_history.append(("assistant", respuesta))
                             st.rerun()
                     
@@ -787,14 +567,26 @@ def main():
                             pregunta = "Calcula y presenta las métricas más importantes: promedios, porcentajes, tendencias y comparaciones entre empleados"
                             st.session_state.chat_history.append(("user", pregunta))
                             with st.spinner("🔍 Calculando métricas..."):
-                                respuesta = procesar_respuesta_ia(pregunta, df_reporte, GROQ_API_KEY)
+                                respuesta = consultar_groq(pregunta, df_reporte, GROQ_API_KEY)
                                 st.session_state.chat_history.append(("assistant", respuesta))
                             st.rerun()
                     
                     # Mostrar historial de chat con nuevo diseño
-                    for i, (role, message) in enumerate(st.session_state.chat_history):
-                        mostrar_mensaje_chat(role, message)  # ← REEMPLAZAR TODO EL BLOQUE CON ESTA LÍNEA
-                                        
+                    if st.session_state.chat_history:
+                        st.markdown("#### 💬 Conversación:")
+                        for i, (role, message) in enumerate(st.session_state.chat_history):
+                            if role == "user":
+                                st.markdown(f"""
+                                <div class="chat-message-user">
+                                    <strong>🧑‍💼 Tu pregunta:</strong><br>{message}
+                                </div>
+                                """, unsafe_allow_html=True)
+                            else:
+                                st.markdown(f"""
+                                <div class="chat-message-ai">
+                                    <strong>🤖 Análisis:</strong><br>{message}
+                                """, unsafe_allow_html=True)
+                    
                     # Input para nueva pregunta con diseño mejorado
                     st.markdown("#### ✍️ Haz tu pregunta personalizada:")
                     col1, col2 = st.columns([5, 1])
@@ -812,7 +604,7 @@ def main():
                             if nueva_pregunta.strip():
                                 st.session_state.chat_history.append(("user", nueva_pregunta))
                                 with st.spinner("🤖 Generando análisis..."):
-                                    respuesta = procesar_respuesta_ia(nueva_pregunta, df_reporte, GROQ_API_KEY)
+                                    respuesta = consultar_groq(nueva_pregunta, df_reporte, GROQ_API_KEY)
                                     st.session_state.chat_history.append(("assistant", respuesta))
                                 st.rerun()
                     
