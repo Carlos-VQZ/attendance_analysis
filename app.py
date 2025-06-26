@@ -295,10 +295,10 @@ def main():
 
     # Función para generar consulta con IA 
     def generar_consulta_con_ia(pregunta, df_reporte, api_key):
-        """Genera consulta con IA - VERSIÓN CORREGIDA"""
+        """Genera consulta con IA - VERSIÓN MEJORADA"""
         url = "https://api.groq.com/openai/v1/chat/completions"
         
-        # CORRECCIÓN: Ahora recibe el DataFrame completo
+        # Obtener información del DataFrame
         info_str, dtypes_detail = obtener_info_dataframe(df_reporte)
         
         # Obtener describe solo para columnas numéricas
@@ -310,7 +310,7 @@ def main():
         except:
             describe_str = "No hay columnas numéricas para describir"
         
-        # CONTEXTO MEJORADO Y SIMPLIFICADO
+        # CONTEXTO MEJORADO CON MEJOR MANEJO DE TIEMPOS
         contexto = f"""
     Eres un experto en pandas y análisis de datos de RH. Genera SOLO código Python ejecutable para responder preguntas sobre el DataFrame 'df_reporte'.
 
@@ -327,23 +327,53 @@ def main():
     ESTADÍSTICAS (solo columnas numéricas):
     {describe_str}
 
+    FUNCIONES AUXILIARES DISPONIBLES:
+    1. convertir_tiempo_a_minutos(tiempo_str) - Convierte "HH:MM" a minutos
+    2. convertir_tiempo_a_horas_decimales(tiempo_str) - Convierte "HH:MM" a horas decimales
+    3. obtener_empleado_max_tiempo_extra() - Obtiene empleado con más tiempo extra
+    4. obtener_empleado_max_horas_trabajadas() - Obtiene empleado con más horas trabajadas
+    5. obtener_top_empleados_por_columna(columna, n=5, orden='desc') - Top N empleados por columna
+
     REGLAS IMPORTANTES:
     1. USA SOLO el DataFrame 'df_reporte'
     2. SIEMPRE termina con print() del resultado
     3. SIEMPRE verifica que las columnas existan antes de usarlas
-    4. Para rankings, usa .head(5) o .tail(5)
-    5. Para columnas de texto (como 'Horas Trabajadas'), usa sort_values()
-    6. Para columnas numéricas, puedes usar nlargest(), nsmallest(), mean(), sum()
+    4. Para columnas de tiempo (formato HH:MM), usa las funciones auxiliares
+    5. Para rankings, usa .head(5) o .tail(5)
+    6. Para preguntas sobre tiempo extra o horas trabajadas, usa las funciones auxiliares
 
-    EJEMPLO DE CÓDIGO CORRECTO:
+    EJEMPLOS DE CÓDIGO CORRECTO:
+
+    Para tiempo extra:
     ```python
-    # Verificar si la columna existe
+    resultado = obtener_empleado_max_tiempo_extra()
+    print(resultado)
+    ```
+
+    Para top retardos:
+    ```python
     if 'Retardos' in df_reporte.columns:
         print("Top 5 empleados con más retardos:")
         print(df_reporte.nlargest(5, 'Retardos')[['Nombre', 'Retardos']])
     else:
         print("La columna 'Retardos' no existe")
     ```
+
+    Para análisis de horas trabajadas:
+    ```python
+    if 'Horas Trabajadas' in df_reporte.columns:
+        # Crear columna temporal con minutos
+        df_temp = df_reporte.copy()
+        df_temp['Horas_Minutos'] = df_temp['Horas Trabajadas'].apply(convertir_tiempo_a_minutos)
+        
+        print("Top 5 empleados con más horas trabajadas:")
+        top_horas = df_temp.nlargest(5, 'Horas_Minutos')[['Nombre', 'Horas Trabajadas']]
+        print(top_horas)
+    else:
+        print("La columna 'Horas Trabajadas' no existe")
+    ```
+
+    IMPORTANTE: Para columnas con formato de tiempo (HH:MM), SIEMPRE usa las funciones auxiliares para convertir antes de hacer comparaciones o cálculos.
 
     GENERA SOLO CÓDIGO PYTHON, SIN EXPLICACIONES.
     """
@@ -359,7 +389,7 @@ def main():
                 {"role": "user", "content": pregunta}
             ],
             "model": "llama-3.3-70b-versatile",
-            "temperature": 1,  
+            "temperature": 0.3,  # Reducir temperatura para más consistencia
             "max_completion_tokens": 512,
             "top_p": 1,
             "stream": False
@@ -375,11 +405,9 @@ def main():
         except Exception as e:
             return f"Error al generar consulta: {str(e)}"
 
-
     def ejecutar_consulta_mejorada(codigo, df_reporte):
         """Ejecuta código pandas y captura tanto texto como DataFrames"""
         try:
-            import numpy as np
             from io import StringIO
             import sys
             
@@ -387,11 +415,127 @@ def main():
             resultado_texto = ""
             resultado_df = None
             
-            # Contexto seguro
+            # Funciones auxiliares para análisis
+            def convertir_tiempo_a_minutos(tiempo_str):
+                """Convierte formato HH:MM a minutos de forma segura"""
+                try:
+                    if pd.isna(tiempo_str) or str(tiempo_str).strip() in ['N/A', '', '0:00', '00:00']:
+                        return 0
+                    tiempo_str = str(tiempo_str).strip()
+                    if ':' not in tiempo_str:
+                        return 0
+                    partes = tiempo_str.split(':')
+                    if len(partes) != 2:
+                        return 0
+                    horas, minutos = int(partes[0]), int(partes[1])
+                    return horas * 60 + minutos
+                except:
+                    return 0
+            
+            def convertir_tiempo_a_horas_decimales(tiempo_str):
+                """Convierte formato HH:MM a horas decimales"""
+                try:
+                    if pd.isna(tiempo_str) or str(tiempo_str).strip() in ['N/A', '', '0:00', '00:00']:
+                        return 0.0
+                    tiempo_str = str(tiempo_str).strip()
+                    if ':' not in tiempo_str:
+                        return 0.0
+                    partes = tiempo_str.split(':')
+                    if len(partes) != 2:
+                        return 0.0
+                    horas, minutos = int(partes[0]), int(partes[1])
+                    return horas + minutos / 60.0
+                except:
+                    return 0.0
+            
+            def obtener_empleado_max_tiempo_extra():
+                """Encuentra el empleado con más tiempo extra"""
+                try:
+                    if 'Tiempo Extra' not in df_reporte.columns:
+                        return "La columna 'Tiempo Extra' no existe"
+                    
+                    # Crear una copia del dataframe para trabajar
+                    df_temp = df_reporte.copy()
+                    df_temp['Tiempo_Extra_Minutos'] = df_temp['Tiempo Extra'].apply(convertir_tiempo_a_minutos)
+                    
+                    # Encontrar el máximo
+                    max_idx = df_temp['Tiempo_Extra_Minutos'].idxmax()
+                    max_empleado = df_temp.loc[max_idx]
+                    
+                    return f"Empleado con más tiempo extra: {max_empleado['Nombre']} ({max_empleado['Tiempo Extra']})"
+                except Exception as e:
+                    return f"Error al calcular tiempo extra: {str(e)}"
+            
+            def obtener_empleado_max_horas_trabajadas():
+                """Encuentra el empleado con más horas trabajadas"""
+                try:
+                    if 'Horas Trabajadas' not in df_reporte.columns:
+                        return "La columna 'Horas Trabajadas' no existe"
+                    
+                    # Crear una copia del dataframe para trabajar
+                    df_temp = df_reporte.copy()
+                    df_temp['Horas_Trabajadas_Minutos'] = df_temp['Horas Trabajadas'].apply(convertir_tiempo_a_minutos)
+                    
+                    # Encontrar el máximo
+                    max_idx = df_temp['Horas_Trabajadas_Minutos'].idxmax()
+                    max_empleado = df_temp.loc[max_idx]
+                    
+                    return f"Empleado con más horas trabajadas: {max_empleado['Nombre']} ({max_empleado['Horas Trabajadas']})"
+                except Exception as e:
+                    return f"Error al calcular horas trabajadas: {str(e)}"
+            
+            def obtener_top_empleados_por_columna(columna, n=5, orden='desc'):
+                """Obtiene top N empleados por una columna específica"""
+                try:
+                    if columna not in df_reporte.columns:
+                        return f"La columna '{columna}' no existe"
+                    
+                    df_temp = df_reporte.copy()
+                    
+                    # Si es una columna de tiempo, convertir a minutos
+                    if 'Tiempo' in columna or 'Horas' in columna:
+                        df_temp[f'{columna}_Minutos'] = df_temp[columna].apply(convertir_tiempo_a_minutos)
+                        columna_ordenar = f'{columna}_Minutos'
+                    else:
+                        columna_ordenar = columna
+                    
+                    # Ordenar
+                    if orden == 'desc':
+                        df_resultado = df_temp.nlargest(n, columna_ordenar)
+                    else:
+                        df_resultado = df_temp.nsmallest(n, columna_ordenar)
+                    
+                    return df_resultado[['Nombre', columna]]
+                except Exception as e:
+                    return f"Error al obtener top empleados: {str(e)}"
+            
+            # Contexto seguro con funciones auxiliares y tipos básicos
             contexto_seguro = {
                 'df_reporte': df_reporte,
                 'pd': pd,
                 'np': np,
+                'int': int,  # ← AÑADIDO: Incluir int en el contexto
+                'float': float,
+                'str': str,
+                'len': len,
+                'max': max,
+                'min': min,
+                'sum': sum,
+                'abs': abs,
+                'round': round,
+                'range': range,
+                'list': list,
+                'dict': dict,
+                'tuple': tuple,
+                'set': set,
+                'sorted': sorted,
+                'enumerate': enumerate,
+                'zip': zip,
+                'convertir_tiempo_a_minutos': convertir_tiempo_a_minutos,
+                'convertir_tiempo_a_horas_decimales': convertir_tiempo_a_horas_decimales,
+                'obtener_empleado_max_tiempo_extra': obtener_empleado_max_tiempo_extra,
+                'obtener_empleado_max_horas_trabajadas': obtener_empleado_max_horas_trabajadas,
+                'obtener_top_empleados_por_columna': obtener_top_empleados_por_columna,
             }
             
             # Función print personalizada para capturar texto
@@ -443,6 +587,7 @@ def main():
             
         except Exception as e:
             return f"Error al ejecutar consulta: {str(e)}", None
+
 
     # Función principal de análisis 
     def analizar_con_ia(pregunta, df_reporte, api_key):
