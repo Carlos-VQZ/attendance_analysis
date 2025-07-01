@@ -1,9 +1,7 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import io
 import requests
-import json
 from datetime import datetime
 from dotenv import load_dotenv
 import os
@@ -17,13 +15,11 @@ def main():
         initial_sidebar_state="expanded"
     )
 
-    # API KEY DE GROQ - Cambiar por tu API key real
-    load_dotenv()  # Carga las variables del archivo .env
-
     # API KEY DE GROQ
+    load_dotenv()
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-    # CSS personalizado mejorado
+    # CSS personalizado optimizado
     st.markdown("""
     <style>
     .main-header {
@@ -35,20 +31,6 @@ def main():
         color: white;
         box-shadow: 0 8px 32px rgba(0,0,0,0.1);
     }
-    .upload-section {
-        background: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 5px solid #667eea;
-        margin-bottom: 1rem;
-    }
-    .metric-card {
-        background: white;
-        padding: 1rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        text-align: center;
-    }
     .status-ok {
         color: #28a745;
         font-weight: bold;
@@ -58,7 +40,6 @@ def main():
         font-weight: bold;
     }
     
-    /* Estilos del chat mejorados */
     .chat-container {
         background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         border-radius: 20px;
@@ -99,13 +80,6 @@ def main():
         font-size: 1.2rem;
         font-weight: bold;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    }
-    
-    .quick-buttons {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        margin: 1rem 0;
     }
     
     .example-questions {
@@ -187,20 +161,16 @@ def main():
         
         st.markdown("---")
         st.markdown("### 🤖 Chat IA Disponible")
-        if GROQ_API_KEY != "tu_api_key_aqui":
+        if GROQ_API_KEY and GROQ_API_KEY != "tu_api_key_aqui":
             st.success("✅ IA configurada y lista")
         else:
             st.warning("⚠️ Configura tu API Key en el código")
 
     def cargar_y_limpiar(archivo):
         try:
-            # Cargar el archivo sin eliminar columnas todavía
             df = pd.read_excel(archivo, sheet_name=0, header=2)
-
-            # Filtrar filas donde el campo 'Nombre' no sea nulo
             df = df[df['Nombre'].notna()].reset_index(drop=True)
 
-            # Función para validar si es un nombre real
             def es_nombre_valido(nombre):
                 nombre_str = str(nombre).strip()
                 if len(nombre_str) < 3 or nombre_str.isdigit():
@@ -214,7 +184,6 @@ def main():
                     return False
                 return True
 
-            # Encontrar la última fila válida con nombre
             ultima_fila_valida = -1
             for i, fila in df.iterrows():
                 if es_nombre_valido(fila['Nombre']):
@@ -222,15 +191,12 @@ def main():
                 else:
                     break
 
-            # Cortar solo hasta la última fila válida
             if ultima_fila_valida != -1:
                 df = df.iloc[:ultima_fila_valida + 1].reset_index(drop=True)
             else:
                 df = df.iloc[0:0]
 
-            # Eliminar columnas sin nombre claro
             df = df.loc[:, ~df.columns.astype(str).str.startswith("Unnamed")]
-
             st.sidebar.success(f"✅ Archivo procesado: {len(df)} empleados encontrados")
             return df
 
@@ -238,8 +204,6 @@ def main():
             st.error(f"Error al cargar archivo: {str(e)}")
             return None
 
-
-    # Función para convertir HH:MM a minutos
     def tiempo_a_minutos(tiempo_str):
         if pd.isna(tiempo_str) or tiempo_str in ['F', 'N/L', 'J']:
             return 0
@@ -254,7 +218,6 @@ def main():
         except:
             return 0
 
-    # Funciones de conteo
     def contar_dias_trabajados(fila):
         return sum(1 for col in fila.index if str(col).isdigit() and pd.notna(fila[col]) and ':' in str(fila[col]) and fila[col] not in ['F', 'N/L', 'J'])
 
@@ -267,11 +230,9 @@ def main():
     def contar_retardos(fila):
         return sum(1 for col in fila.index if str(col).isdigit() and pd.notna(fila[col]) and fila[col] not in ['F', 'N/L', 'J'] and tiempo_a_minutos(fila[col]) >= 10)
 
-    # Función para consultar a Groq
     def consultar_groq(pregunta, datos_contexto, api_key):
         url = "https://api.groq.com/openai/v1/chat/completions"
         
-        # Preparar el contexto con los datos
         contexto = f"""
         Eres un analista de recursos humanos especializado en reportes de asistencias. 
         Tienes acceso a los siguientes datos de un reporte de asistencias:
@@ -315,7 +276,6 @@ def main():
         try:
             response = requests.post(url, headers=headers, json=data, timeout=30)
             response.raise_for_status()
-            print(response.json()['choices'][0]['message']['content'])
             return response.json()['choices'][0]['message']['content']
         except requests.exceptions.RequestException as e:
             return f"Error al conectar con Groq: {str(e)}"
@@ -355,7 +315,6 @@ def main():
     if all([archivo_horas, archivo_diferencia, archivo_retardos, archivo_tiempo_extra]):
         
         with st.spinner('Procesando archivos... Por favor espera'):
-            # Cargar DataFrames
             df_horas = cargar_y_limpiar(archivo_horas)
             df_diferencia = cargar_y_limpiar(archivo_diferencia)
             df_retardos = cargar_y_limpiar(archivo_retardos)
@@ -363,24 +322,63 @@ def main():
 
             if all(df is not None for df in [df_horas, df_diferencia, df_retardos, df_tiempo_extra]):
                 
-                # Generar reporte
+                # Usar df_horas como base principal (todos los empleados deben estar aquí)
                 reporte_data = []
                 
+                # Iterar sobre cada empleado en df_horas
                 for i in range(len(df_horas)):
                     nombre = df_horas.iloc[i]['Nombre']
                     fila_horas = df_horas.iloc[i]
-                    fila_diferencia = df_diferencia.iloc[i]
-                    fila_retardos = df_retardos.iloc[i]
-                    fila_tiempo_extra = df_tiempo_extra.iloc[i]
                     
+                    # Buscar la fila correspondiente en cada DataFrame
+                    # Si no existe, crear una fila vacía con valores por defecto
+                    
+                    # Buscar en df_diferencia
+                    fila_diferencia = None
+                    for j in range(len(df_diferencia)):
+                        if df_diferencia.iloc[j]['Nombre'] == nombre:
+                            fila_diferencia = df_diferencia.iloc[j]
+                            break
+                    
+                    # Buscar en df_retardos
+                    fila_retardos = None
+                    for j in range(len(df_retardos)):
+                        if df_retardos.iloc[j]['Nombre'] == nombre:
+                            fila_retardos = df_retardos.iloc[j]
+                            break
+                    
+                    # Buscar en df_tiempo_extra
+                    fila_tiempo_extra = None
+                    for j in range(len(df_tiempo_extra)):
+                        if df_tiempo_extra.iloc[j]['Nombre'] == nombre:
+                            fila_tiempo_extra = df_tiempo_extra.iloc[j]
+                            break
+                    
+                    # Extraer datos de df_horas (siempre existe)
                     horas_trabajadas = fila_horas.get('Total de\nHoras') or fila_horas.get('Total de Horas') or 'N/A'
                     dias_trabajados = contar_dias_trabajados(fila_horas)
                     dias_descanso = contar_dias_descanso(fila_horas)
                     dias_falta = fila_horas.get('Faltas', 0) or 0
-                    dias_registro_mal = contar_registro_mal(fila_diferencia)
-                    dias_con_retardo = contar_retardos(fila_retardos)
-                    diferencia_total = fila_diferencia.get('Tiempo\nTotal') or fila_diferencia.get('Tiempo Total') or 'N/A'
-                    tiempo_extra = fila_tiempo_extra.get('Tiempo\nTotal') or fila_tiempo_extra.get('Tiempo Total') or 'N/A'
+                    
+                    # Extraer datos de df_diferencia (si existe)
+                    if fila_diferencia is not None:
+                        dias_registro_mal = contar_registro_mal(fila_diferencia)
+                        diferencia_total = fila_diferencia.get('Tiempo\nTotal') or fila_diferencia.get('Tiempo Total') or 'N/A'
+                    else:
+                        dias_registro_mal = 0
+                        diferencia_total = '00:00'
+                    
+                    # Extraer datos de df_retardos (si existe)
+                    if fila_retardos is not None:
+                        dias_con_retardo = contar_retardos(fila_retardos)
+                    else:
+                        dias_con_retardo = 0
+                    
+                    # Extraer datos de df_tiempo_extra (si existe)
+                    if fila_tiempo_extra is not None:
+                        tiempo_extra = fila_tiempo_extra.get('Tiempo\nTotal') or fila_tiempo_extra.get('Tiempo Total') or 'N/A'
+                    else:
+                        tiempo_extra = '00:00'
                     
                     reporte_data.append({
                         'Nombre': nombre,
@@ -394,7 +392,6 @@ def main():
                         'Tiempo Extra': tiempo_extra
                     })
 
-                # Crear DataFrame del reporte
                 df_reporte = pd.DataFrame(reporte_data)
 
                 # Mostrar métricas generales
@@ -426,7 +423,6 @@ def main():
                 # Mostrar tabla del reporte
                 st.subheader("📋 Reporte Detallado de Asistencias")
                 
-                # Filtros
                 col1, col2 = st.columns(2)
                 with col1:
                     filtro_nombre = st.text_input("🔍 Buscar por nombre:", placeholder="Escribe el nombre del empleado...")
@@ -434,12 +430,10 @@ def main():
                 with col2:
                     mostrar_todos = st.checkbox("Mostrar todos los empleados", value=True)
 
-                # Aplicar filtros
                 df_filtrado = df_reporte.copy()
                 if filtro_nombre and not mostrar_todos:
                     df_filtrado = df_filtrado[df_filtrado['Nombre'].str.contains(filtro_nombre, case=False, na=False)]
 
-                # Mostrar tabla
                 st.dataframe(
                     df_filtrado,
                     use_container_width=True,
@@ -457,12 +451,67 @@ def main():
                     }
                 )
 
+                # Diagnóstico de datos para debug
+                with st.expander("🔍 Diagnóstico de Datos (Debug)"):
+                    st.write("**Empleados por reporte:**")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.write(f"**Horas:** {len(df_horas)} empleados")
+                        st.write("Nombres:")
+                        for nombre in df_horas['Nombre'].tolist()[:5]:
+                            st.write(f"- {nombre}")
+                        if len(df_horas) > 5:
+                            st.write(f"... y {len(df_horas) - 5} más")
+                    
+                    with col2:
+                        st.write(f"**Diferencia:** {len(df_diferencia)} empleados")
+                        st.write("Nombres:")
+                        for nombre in df_diferencia['Nombre'].tolist()[:5]:
+                            st.write(f"- {nombre}")
+                        if len(df_diferencia) > 5:
+                            st.write(f"... y {len(df_diferencia) - 5} más")
+                    
+                    with col3:
+                        st.write(f"**Retardos:** {len(df_retardos)} empleados")
+                        st.write("Nombres:")
+                        for nombre in df_retardos['Nombre'].tolist()[:5]:
+                            st.write(f"- {nombre}")
+                        if len(df_retardos) > 5:
+                            st.write(f"... y {len(df_retardos) - 5} más")
+                    
+                    with col4:
+                        st.write(f"**Tiempo Extra:** {len(df_tiempo_extra)} empleados")
+                        st.write("Nombres:")
+                        for nombre in df_tiempo_extra['Nombre'].tolist()[:5]:
+                            st.write(f"- {nombre}")
+                        if len(df_tiempo_extra) > 5:
+                            st.write(f"... y {len(df_tiempo_extra) - 5} más")
+                    
+                    # Mostrar empleados que no aparecen en algunos reportes
+                    empleados_horas = set(df_horas['Nombre'].tolist())
+                    empleados_diferencia = set(df_diferencia['Nombre'].tolist())
+                    empleados_retardos = set(df_retardos['Nombre'].tolist())
+                    empleados_tiempo_extra = set(df_tiempo_extra['Nombre'].tolist())
+                    
+                    st.write("**Empleados que faltan en cada reporte:**")
+                    
+                    faltantes_diferencia = empleados_horas - empleados_diferencia
+                    faltantes_retardos = empleados_horas - empleados_retardos
+                    faltantes_tiempo_extra = empleados_horas - empleados_tiempo_extra
+                    
+                    if faltantes_diferencia:
+                        st.write(f"**No están en Diferencia:** {', '.join(list(faltantes_diferencia)[:3])}")
+                    if faltantes_retardos:
+                        st.write(f"**No están en Retardos:** {', '.join(list(faltantes_retardos)[:3])}")
+                    if faltantes_tiempo_extra:
+                        st.write(f"**No están en Tiempo Extra:** {', '.join(list(faltantes_tiempo_extra)[:3])}")
+
                 # Botón para descargar reporte
                 st.markdown("---")
                 col1, col2, col3 = st.columns([1, 1, 1])
                 
                 with col2:
-                    # Crear archivo Excel para descarga
                     output = io.BytesIO()
                     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                         df_reporte.to_excel(writer, sheet_name='Reporte_Asistencias', index=False)
@@ -475,27 +524,23 @@ def main():
                         use_container_width=True
                     )
 
-                # Mostrar vista previa de los archivos cargados
+                # Vista previa de archivos cargados
                 with st.expander("👀 Vista previa de archivos cargados"):
                     tab1, tab2, tab3, tab4 = st.tabs(["Horas", "Diferencias", "Retardos", "Tiempo Extra"])
                     
                     with tab1:
                         st.dataframe(df_horas, use_container_width=True)
-                    
                     with tab2:
                         st.dataframe(df_diferencia, use_container_width=True)
-                    
                     with tab3:
                         st.dataframe(df_retardos, use_container_width=True)
-                    
                     with tab4:
                         st.dataframe(df_tiempo_extra, use_container_width=True)
 
-                # Chat de análisis con IA - Nuevo diseño
+                # Chat de análisis con IA
                 st.markdown("---")
                 
-                if GROQ_API_KEY != "tu_api_key_aqui":
-                    # Header del chat
+                if GROQ_API_KEY and GROQ_API_KEY != "tu_api_key_aqui":
                     st.markdown("""
                     <div class="chat-header">
                         🤖 Asistente de Análisis de RH
@@ -503,14 +548,11 @@ def main():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Contenedor del chat
                     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
                     
-                    # Inicializar historial de chat
                     if "chat_history" not in st.session_state:
                         st.session_state.chat_history = []
                     
-                    # Ejemplos de preguntas en cards
                     st.markdown("""
                     <div class="example-questions">
                         <h4>💡 Preguntas que puedes hacer:</h4>
@@ -531,7 +573,6 @@ def main():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Botones de preguntas rápidas con nuevo diseño
                     st.markdown("#### 🚀 Análisis rápido:")
                     col1, col2, col3, col4 = st.columns(4)
                     
@@ -571,7 +612,6 @@ def main():
                                 st.session_state.chat_history.append(("assistant", respuesta))
                             st.rerun()
                     
-                    # Mostrar historial de chat con nuevo diseño
                     if st.session_state.chat_history:
                         st.markdown("#### 💬 Conversación:")
                         for i, (role, message) in enumerate(st.session_state.chat_history):
@@ -585,9 +625,9 @@ def main():
                                 st.markdown(f"""
                                 <div class="chat-message-ai">
                                     <strong>🤖 Análisis:</strong><br>{message}
+                                </div>
                                 """, unsafe_allow_html=True)
                     
-                    # Input para nueva pregunta con diseño mejorado
                     st.markdown("#### ✍️ Haz tu pregunta personalizada:")
                     col1, col2 = st.columns([5, 1])
                     
@@ -608,7 +648,6 @@ def main():
                                     st.session_state.chat_history.append(("assistant", respuesta))
                                 st.rerun()
                     
-                    # Botones de acción
                     if st.session_state.chat_history:
                         col1, col2, col3 = st.columns([1, 1, 1])
                         with col2:
@@ -642,13 +681,9 @@ def main():
                     </div>
                     """, unsafe_allow_html=True)
 
-            else:
-                st.error("❌ Error al procesar uno o más archivos. Verifica que los archivos sean válidos.")
-
     else:
         st.info("👆 Por favor, carga los 4 archivos Excel requeridos en la barra lateral para generar el reporte.")
         
-        # Instrucciones actualizadas
         st.markdown("""
         ### 📋 Instrucciones:
         
