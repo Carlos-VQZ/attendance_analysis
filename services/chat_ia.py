@@ -8,10 +8,15 @@ from utils.config import Config
 
 
 class ChatIAService:
-    def __init__(self):
+    def __init__(self, api_key: str = None):
         self.config = Config()
-        self.api_key = self.config.GROQ_API_KEY
+        # Usar la API key proporcionada o la del config
+        self.api_key = api_key or self.config.GROQ_API_KEY
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
+    
+    def set_api_key(self, api_key: str):
+        """Método para establecer la API key después de la inicialización"""
+        self.api_key = api_key
     
     def generar_consulta_ia(
         self, 

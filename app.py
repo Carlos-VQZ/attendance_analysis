@@ -356,8 +356,85 @@ def mostrar_mensaje_chat(role: str, message):
             </div>
             """, unsafe_allow_html=True)
 
+def mostrar_instrucciones():
+    """Muestra instrucciones cuando no hay archivos cargados"""
+    st.info("👆 Por favor, carga los 4 archivos Excel requeridos en la barra lateral para generar el reporte.")
+    
+    st.markdown("""
+    ### 📋 Instrucciones:
+    
+    1. **Ingresa tu API Key**: Usa la barra lateral para ingresar tu API Key de Groq
+    2. **Carga los archivos**: Usa la barra lateral para subir los 4 archivos Excel requeridos
+    3. **Archivos necesarios**:
+       - 📋 Reporte de Horas Trabajadas
+       - 📊 Reporte de Diferencias  
+       - ⏰ Reporte de Retardos
+       - ⏱️ Reporte de Tiempo Extra
+    4. **Procesamiento automático**: Una vez cargados todos los archivos, el reporte se generará automáticamente
+    5. **Análisis con IA**: Usa el chat rediseñado para hacer preguntas sobre los datos
+    6. **Descarga**: Podrás descargar el reporte final en formato Excel
+    """)
+# Cambios necesarios en el archivo principal de Streamlit
+
+def main():
+    # Configuración inicial de la página
+    configurar_pagina()
+    
+    # Inicializar servicios
+    archivos_service = ArchivosService()
+    reporte_service = ReporteService()
+    
+    # Cargar archivos desde sidebar y obtener API key
+    archivos, api_key_usuario = cargar_archivos_sidebar(archivos_service)
+    
+    # Inicializar chat IA service - CAMBIO AQUÍ
+    chat_ia_service = None
+    if api_key_usuario:
+        try:
+            # Pasar la API key al constructor
+            chat_ia_service = ChatIAService(api_key=api_key_usuario)
+        except Exception as e:
+            st.error(f"Error al inicializar ChatIAService: {str(e)}")
+            chat_ia_service = None
+    
+    # Mostrar estado de los archivos
+    mostrar_estado_archivos(archivos)
+    
+    # Procesar si todos los archivos están cargados
+    if archivos_service.validar_archivos_cargados(*archivos.values()):
+        with st.spinner('Procesando archivos...'):
+            try:
+                # Cargar y procesar archivos
+                df_horas = archivos_service.cargar_archivo_excel(archivos['horas'])
+                df_diferencia = archivos_service.cargar_archivo_excel(archivos['diferencia'])
+                df_retardos = archivos_service.cargar_archivo_excel(archivos['retardos'])
+                df_tiempo_extra = archivos_service.cargar_archivo_excel(archivos['tiempo_extra'])
+                
+                if all(df is not None for df in [df_horas, df_diferencia, df_retardos, df_tiempo_extra]):
+                    # Generar reporte consolidado
+                    reporte = reporte_service.generar_reporte_consolidado(
+                        df_horas, df_diferencia, df_retardos, df_tiempo_extra
+                    )
+                    
+                    # Mostrar reporte
+                    mostrar_reporte(reporte)
+                    
+                    # Mostrar chat IA si está configurado
+                    if chat_ia_service and api_key_usuario:
+                        mostrar_chat_ia(chat_ia_service, reporte)
+                    else:
+                        st.warning("ℹ️ Ingresa tu API Key de Groq en la barra lateral para habilitar el chat de análisis")
+                    
+                    st.success("✅ Procesamiento completado exitosamente")
+                else:
+                    st.error("❌ Error al procesar uno o más archivos. Verifica que los archivos sean válidos.")
+            except Exception as e:
+                st.error(f"❌ Error inesperado: {str(e)}")
+    else:
+        mostrar_instrucciones()
+
 def mostrar_chat_ia(chat_ia_service: ChatIAService, reporte: ReporteConsolidado):
-    """Muestra la interfaz del chat de IA"""
+    """Muestra la interfaz del chat de IA - CAMBIO: Removido api_key del parámetro"""
     # Convertir el modelo a DataFrame para el chat
     df_reporte = pd.DataFrame([vars(e) for e in reporte.empleados])
     
@@ -408,6 +485,7 @@ def mostrar_chat_ia(chat_ia_service: ChatIAService, reporte: ReporteConsolidado)
             pregunta = "Dame un resumen general del reporte de asistencias con los principales hallazgos y estadísticas importantes"
             st.session_state.chat_history.append(("user", pregunta))
             with st.spinner("🔍 Analizando datos..."):
+                # CAMBIO: Removido api_key del parámetro
                 respuesta = chat_ia_service.generar_consulta_ia(pregunta, df_reporte)
                 st.session_state.chat_history.append(("assistant", {
                     'tipo': 'ia_analysis',
@@ -422,6 +500,7 @@ def mostrar_chat_ia(chat_ia_service: ChatIAService, reporte: ReporteConsolidado)
             pregunta = "Identifica empleados con problemas críticos de asistencia, puntualidad o registro. Dame nombres específicos y qué acciones recomiendas"
             st.session_state.chat_history.append(("user", pregunta))
             with st.spinner("🔍 Identificando problemas..."):
+                # CAMBIO: Removido api_key del parámetro
                 respuesta = chat_ia_service.generar_consulta_ia(pregunta, df_reporte)
                 st.session_state.chat_history.append(("assistant", {
                     'tipo': 'ia_analysis',
@@ -436,6 +515,7 @@ def mostrar_chat_ia(chat_ia_service: ChatIAService, reporte: ReporteConsolidado)
             pregunta = "¿Cuáles son los empleados con mejor desempeño en asistencia y puntualidad? Dame un ranking de los top 5"
             st.session_state.chat_history.append(("user", pregunta))
             with st.spinner("🔍 Evaluando desempeño..."):
+                # CAMBIO: Removido api_key del parámetro
                 respuesta = chat_ia_service.generar_consulta_ia(pregunta, df_reporte)
                 st.session_state.chat_history.append(("assistant", {
                     'tipo': 'ia_analysis',
@@ -450,6 +530,7 @@ def mostrar_chat_ia(chat_ia_service: ChatIAService, reporte: ReporteConsolidado)
             pregunta = "Calcula y presenta las métricas más importantes: promedios, porcentajes, tendencias y comparaciones entre empleados"
             st.session_state.chat_history.append(("user", pregunta))
             with st.spinner("🔍 Calculando métricas..."):
+                # CAMBIO: Removido api_key del parámetro
                 respuesta = chat_ia_service.generar_consulta_ia(pregunta, df_reporte)
                 st.session_state.chat_history.append(("assistant", {
                     'tipo': 'ia_analysis',
@@ -480,6 +561,7 @@ def mostrar_chat_ia(chat_ia_service: ChatIAService, reporte: ReporteConsolidado)
             if nueva_pregunta.strip():
                 st.session_state.chat_history.append(("user", nueva_pregunta))
                 with st.spinner("🤖 Generando análisis..."):
+                    # CAMBIO: Removido api_key del parámetro
                     respuesta = chat_ia_service.generar_consulta_ia(nueva_pregunta, df_reporte)
                     st.session_state.chat_history.append(("assistant", {
                         'tipo': 'ia_analysis',
@@ -499,74 +581,6 @@ def mostrar_chat_ia(chat_ia_service: ChatIAService, reporte: ReporteConsolidado)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-def mostrar_instrucciones():
-    """Muestra instrucciones cuando no hay archivos cargados"""
-    st.info("👆 Por favor, carga los 4 archivos Excel requeridos en la barra lateral para generar el reporte.")
-    
-    st.markdown("""
-    ### 📋 Instrucciones:
-    
-    1. **Ingresa tu API Key**: Usa la barra lateral para ingresar tu API Key de Groq
-    2. **Carga los archivos**: Usa la barra lateral para subir los 4 archivos Excel requeridos
-    3. **Archivos necesarios**:
-       - 📋 Reporte de Horas Trabajadas
-       - 📊 Reporte de Diferencias  
-       - ⏰ Reporte de Retardos
-       - ⏱️ Reporte de Tiempo Extra
-    4. **Procesamiento automático**: Una vez cargados todos los archivos, el reporte se generará automáticamente
-    5. **Análisis con IA**: Usa el chat rediseñado para hacer preguntas sobre los datos
-    6. **Descarga**: Podrás descargar el reporte final en formato Excel
-    """)
-
-def main():
-    # Configuración inicial de la página
-    configurar_pagina()
-    
-    # Inicializar servicios
-    archivos_service = ArchivosService()
-    reporte_service = ReporteService()
-    
-    # Cargar archivos desde sidebar y obtener API key
-    archivos, api_key_usuario = cargar_archivos_sidebar(archivos_service)
-    
-    # Inicializar chat IA service con la API key
-    chat_ia_service = ChatIAService(api_key=api_key_usuario) if api_key_usuario else None
-    
-    # Mostrar estado de los archivos
-    mostrar_estado_archivos(archivos)
-    
-    # Procesar si todos los archivos están cargados
-    if archivos_service.validar_archivos_cargados(*archivos.values()):
-        with st.spinner('Procesando archivos...'):
-            try:
-                # Cargar y procesar archivos
-                df_horas = archivos_service.cargar_archivo_excel(archivos['horas'])
-                df_diferencia = archivos_service.cargar_archivo_excel(archivos['diferencia'])
-                df_retardos = archivos_service.cargar_archivo_excel(archivos['retardos'])
-                df_tiempo_extra = archivos_service.cargar_archivo_excel(archivos['tiempo_extra'])
-                
-                if all(df is not None for df in [df_horas, df_diferencia, df_retardos, df_tiempo_extra]):
-                    # Generar reporte consolidado
-                    reporte = reporte_service.generar_reporte_consolidado(
-                        df_horas, df_diferencia, df_retardos, df_tiempo_extra
-                    )
-                    
-                    # Mostrar reporte
-                    mostrar_reporte(reporte)
-                    
-                    # Mostrar chat IA si está configurado
-                    if chat_ia_service and api_key_usuario:
-                        mostrar_chat_ia(chat_ia_service, reporte)
-                    else:
-                        st.warning("ℹ️ Ingresa tu API Key de Groq en la barra lateral para habilitar el chat de análisis")
-                    
-                    st.success("✅ Procesamiento completado exitosamente")
-                else:
-                    st.error("❌ Error al procesar uno o más archivos. Verifica que los archivos sean válidos.")
-            except Exception as e:
-                st.error(f"❌ Error inesperado: {str(e)}")
-    else:
-        mostrar_instrucciones()
 
 if __name__ == "__main__":
     main()
