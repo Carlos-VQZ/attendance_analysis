@@ -6,7 +6,6 @@ from models.reporte import ReporteConsolidado
 from services.archivos import ArchivosService
 from services.reporte import ReporteService
 from services.chat_ia import ChatIAService
-from utils.config import Config
 import sys
 import os
 
@@ -139,8 +138,8 @@ def configurar_pagina():
     </div>
     """, unsafe_allow_html=True)
 
-def cargar_archivos_sidebar(archivos_service: ArchivosService) -> dict:
-    """Muestra los uploaders en el sidebar y devuelve los archivos cargados"""
+def cargar_archivos_sidebar(archivos_service: ArchivosService) -> tuple:
+    """Muestra los uploaders en el sidebar y devuelve los archivos cargados y la API key"""
     with st.sidebar:
         st.header("📁 Cargar Archivos Excel")
         st.markdown("---")
@@ -174,13 +173,14 @@ def cargar_archivos_sidebar(archivos_service: ArchivosService) -> dict:
         
         st.markdown("---")
         st.markdown("### 🤖 Chat IA Disponible")
-        config = Config()
-        if config.GROQ_API_KEY != "tu_api_key_aqui":
-            st.success("✅ IA configurada y lista")
+        api_key_usuario = st.text_input("🔑 Ingresa tu API Key de Groq:", type="password")
+
+        if api_key_usuario:
+            st.success("✅ API Key ingresada correctamente")
         else:
-            st.warning("⚠️ Configura tu API Key en el código")
+            st.warning("⚠️ Debes ingresar tu API Key para usar el análisis con IA")
     
-    return archivos
+    return archivos, api_key_usuario
 
 def mostrar_estado_archivos(archivos: dict):
     """Muestra el estado de los archivos cargados"""
@@ -506,7 +506,7 @@ def mostrar_instrucciones():
     st.markdown("""
     ### 📋 Instrucciones:
     
-    1. **Configura tu API Key**: Cambia "tu_api_key_aqui" en el código por tu API Key real de Groq
+    1. **Ingresa tu API Key**: Usa la barra lateral para ingresar tu API Key de Groq
     2. **Carga los archivos**: Usa la barra lateral para subir los 4 archivos Excel requeridos
     3. **Archivos necesarios**:
        - 📋 Reporte de Horas Trabajadas
@@ -525,10 +525,12 @@ def main():
     # Inicializar servicios
     archivos_service = ArchivosService()
     reporte_service = ReporteService()
-    chat_ia_service = ChatIAService()
     
-    # Cargar archivos desde sidebar
-    archivos = cargar_archivos_sidebar(archivos_service)
+    # Cargar archivos desde sidebar y obtener API key
+    archivos, api_key_usuario = cargar_archivos_sidebar(archivos_service)
+    
+    # Inicializar chat IA service con la API key
+    chat_ia_service = ChatIAService(api_key=api_key_usuario) if api_key_usuario else None
     
     # Mostrar estado de los archivos
     mostrar_estado_archivos(archivos)
@@ -553,11 +555,10 @@ def main():
                     mostrar_reporte(reporte)
                     
                     # Mostrar chat IA si está configurado
-                    config = Config()
-                    if config.GROQ_API_KEY != "tu_api_key_aqui":
+                    if chat_ia_service and api_key_usuario:
                         mostrar_chat_ia(chat_ia_service, reporte)
                     else:
-                        st.warning("ℹ️ Configura tu API Key de Groq para habilitar el chat de análisis")
+                        st.warning("ℹ️ Ingresa tu API Key de Groq en la barra lateral para habilitar el chat de análisis")
                     
                     st.success("✅ Procesamiento completado exitosamente")
                 else:
